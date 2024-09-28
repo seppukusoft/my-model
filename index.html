@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polling Predictions</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="dp.js"></script>
+</head>
+<body>
+
+    <h1>Polling Predictions</h1>
+
+    <label for="stateDropdown">Select State: </label>
+    <select id="stateDropdown">
+        <option value="national">--Select--</option>
+    </select>
+    <label for="xDropdown">How many days of data?</label>
+    <select id="xDropdown">
+      <option value="15">15</option>
+      <option value="30">30</option>
+      <option value="35">45</option>
+    </select>
+
+    <h2>Results</h2>
+    <div id="results">
+        <p id="probability">Probability: </p>
+        <p id="voteShare">Vote Share: </p>
+        <ul id="electoralVotes"></ul>
+        <p id="totalElectoralVotes">Total Electoral Votes: </p>
+    </div>
+
+    <br>
+    <u>(for the record, this is super unfinished & buggy, so i wouldn't trust it too much)</u>
+</body>
+</html>
