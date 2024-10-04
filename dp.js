@@ -76,11 +76,14 @@ document.addEventListener("DOMContentLoaded", function () {
     function updateStateDropdown() {
         const dropdown = document.getElementById("stateDropdown");
         dropdown.innerHTML = ""; // Clear existing options
-    
+        const selectOption = document.createElement("option");
+        selectOption.value = ""; 
+        selectOption.text = "--Select--"; 
+        dropdown.appendChild(selectOption);
+        
         const pollCounts = countPollsByState(data); // Get the poll counts
         const statesWithSufficientPolls = Object.keys(pollCounts).filter(state => pollCounts[state] >= 20);
     
-        // Populate dropdown with filtered states
         statesWithSufficientPolls.forEach(state => {
             const option = document.createElement("option");
             option.value = state;
@@ -88,6 +91,7 @@ document.addEventListener("DOMContentLoaded", function () {
             dropdown.appendChild(option);
         });
     }
+    
     
     // Update state results when a dropdown selection changes
     function updateResults(selectedState) {
