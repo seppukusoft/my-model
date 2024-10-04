@@ -11,7 +11,8 @@ document.addEventListener("DOMContentLoaded", function () {
     };
   
     let data = [], weights = {}, x = 45; // Default value for x
-
+    let currentSelectedState = "select";
+    
     // Load data and initialize dropdowns
     checkURL(dataUrl).then(isReachable => {
         if (!isReachable) return console.error("CSV URL is not reachable");
@@ -124,6 +125,7 @@ document.addEventListener("DOMContentLoaded", function () {
         d3.select("#probability").text(`Win Probability: ${probabilityText}`);
         // Calculate and display total electoral votes
         displayTotalElectoralVotes(calculateTotalElectoralVotes(data));
+        d3.select("#resultsState").text(`Data for: ${selectedState}`);
     }
 
     // Filter data based on date range
@@ -160,7 +162,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // Calculate win probability using Monte Carlo simulations
-    function calculateWinProbability(candidates, iterations = 1000000) {
+    function calculateWinProbability(candidates, iterations = 100000) {
         const results = candidates.reduce((acc, { name }) => ({ ...acc, [name]: 0 }), {});
         for (let i = 0; i < iterations; i++) {
             const randomResults = candidates.map(candidate => ({ name: candidate.name, result: candidate.percentage + (Math.random() - 0.9) * 40 }));
@@ -179,43 +181,119 @@ document.addEventListener("DOMContentLoaded", function () {
     
             // Filter data for the last 3 weeks
             const recentData = filterByRecentDates(stateData);
-    
+            const weightedRecentData = calculateWeightedPolls(recentData, weights);
             if (recentData.length > 0) {
                 // Group candidates by name
-                const candidates = d3.group(recentData, d => d.candidate_name);
-    
+                const candidates = d3.group(weightedRecentData, d => d.candidate_name);
+                
                 let highestPercentage = -Infinity;
+                let secondHighestPercentage = -Infinity;
                 let winningCandidate = null;
-    
-                // Find the candidate with the highest percentage in each state
+                let runnerUpCandidate = null;
+            
+                // Find the candidate with the highest and second highest percentage in each state
                 candidates.forEach((candidateData, candidateName) => {
                     const percentage = d3.mean(candidateData, d => d.pct);
                     if (percentage > highestPercentage) {
+                        // Shift the current highest to second place
+                        secondHighestPercentage = highestPercentage;
+                        runnerUpCandidate = winningCandidate;
+            
+                        // Update with new highest
                         highestPercentage = percentage;
                         winningCandidate = candidateName;
+                    } else if (percentage > secondHighestPercentage) {
+                        secondHighestPercentage = percentage;
+                        runnerUpCandidate = candidateName;
                     }
                 });
-    
-                if (winningCandidate) { // Add the electoral votes for the winning candidate in this state
+            
+                if (winningCandidate && secondHighestPercentage !== -Infinity) {
+                    // Calculate the raw margin of win
+                    const margin = highestPercentage - secondHighestPercentage;
+                    
+                    let marginForHarris = Math.abs(margin); // Default margin
+            
+                    if (winningCandidate === 'Donald Trump') {
+                        marginForHarris = -margin; // Negative margin for Trump
+                    }
+                    
+                    if (state != undefined){
+                        if (marginForHarris > 8){
+                            stateColor = "solidD"
+                        }
+                        if (marginForHarris < 8){
+                            stateColor = "likelyD"
+                        }
+                        if (marginForHarris < 5){
+                            stateColor = "leanD"
+                        }
+                        if (marginForHarris < 2){
+                            stateColor = "tiltD"
+                        }
+                        if (marginForHarris < 0){
+                            stateColor = "tiltR"
+                        }
+                        if (marginForHarris < -2){
+                            stateColor = "leanR"
+                        }
+                        if (marginForHarris < -5){
+                            stateColor = "likelyR"
+                        }
+                        if (marginForHarris < -8){
+                            stateColor = "solidR" 
+                        }
+                        var abbState = getStateAbbreviation(state);
+                        applyColor(abbState, stateColor);
+                        changeDesc(abbState, electoralVotesMapping[state]);
+                    }
+                    // Add the electoral votes for the winning candidate in this state
                     totalElectoralVotes[winningCandidate] = (totalElectoralVotes[winningCandidate] || 0) + electoralVotesMapping[state];
                 }
             } else {
                 const stateElectoralVotes = electoralVotesMapping[state];
                 // Add to Harris for specified states
-                if (["District of Columbia", "Hawaii", "Illinois", "New Jersey", "Oregon", "Vermont", "Washington"].includes(state)) {
+                if (["Colorado", "Connecticut", "District of Columbia", "Hawaii", "New Jersey", "Oregon", "Vermont", "Washington", "Illinois", "Maine", "Maine CD-1", "New Mexico", "Massachusetts"].includes(state)) {    
+                    var abbState = getStateAbbreviation(state);
+                    stateColor = "solidD";
+                    applyColor(abbState, stateColor);
+                    changeDesc(abbState, stateElectoralVotes);
                     totalElectoralVotes["Kamala Harris"] = (totalElectoralVotes["Kamala Harris"] || 0) + stateElectoralVotes;
-                } else {
+                } 
+                if (["Alabama", "Arkansas", "Idaho", "Kansas", "Kentucky", "Louisiana", "Mississippi", "Missouri", "Maine CD-2", "Oklahoma", "South Dakota", "Tennessee", "Utah", "West Virginia", "Wyoming"].includes(state)){
                     // Add to Trump for other states
+                    var abbState = getStateAbbreviation(state);
+                    stateColor = "solidR";
+                    applyColor(abbState, stateColor);
+                    changeDesc(abbState, stateElectoralVotes);
+                    if (abbState = "ME2"){
+                        stateColor = "leanR";   
+                        applyColor(abbState, stateColor);
+                    }
                     totalElectoralVotes["Donald Trump"] = (totalElectoralVotes["Donald Trump"] || 0) + stateElectoralVotes;
                 }
             }
         });
+        mapRefresh();
         return totalElectoralVotes;
     }
-    
+    function getStateAbbreviation(stateName) {
+        const stateAbbreviations = {
+            "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA", "Colorado": "CO",
+            "Connecticut": "CT", "Delaware": "DE", "District of Columbia": "DC", "Florida": "FL", "Georgia": "GA",
+            "Hawaii": "HI", "Idaho": "ID", "Illinois": "IL", "Indiana": "IN", "Iowa": "IA", "Kansas": "KS", "Kentucky": "KY",
+            "Louisiana": "LA", "Maine": "ME","Maine CD-1": "ME1", "Maine CD-2": "ME2", "Maryland": "MD", "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN",
+            "Mississippi": "MS", "Missouri": "MO", "Montana": "MT", "Nebraska": "NE", "Nebraska CD-2": "NE2", "Nevada": "NV", "New Hampshire": "NH",
+            "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY", "North Carolina": "NC", "North Dakota": "ND",
+            "Ohio": "OH", "Oklahoma": "OK", "Oregon": "OR", "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC",
+            "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT", "Vermont": "VT", "Virginia": "VA",
+            "Washington": "WA", "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY"
+        };
+    return stateAbbreviations[stateName];
+}
     // Display the total electoral votes
     function displayTotalElectoralVotes(totalElectoralVotes) {
-        d3.select("#totalElectoralVotes").text(`Total Electoral Votes: ${Object.entries(totalElectoralVotes).map(([candidate, votes]) => `${candidate}: ${votes}`).join(", ")}`);
+        d3.select("#totalElectoralVotes").text(`EV: ${Object.entries(totalElectoralVotes).map(([candidate, votes]) => `${candidate}: ${votes}`).join(", ")}`);
     }
 
     // Populate dropdown menus
@@ -252,4 +330,38 @@ document.addEventListener("DOMContentLoaded", function () {
     }   
     
     populateXDropdown(); // Initialize x dropdown
+});
+
+document.addEventListener("DOMContentLoaded", function() {
+    var checkExist = setInterval(function() {
+        var element = document.querySelector('a[href="https://simplemaps.com"][title="For evaluation use only."]');
+        if (element) {
+            element.remove(); // Stop checking once the element is removed
+        }
+    }, 500); // Check every 500ms 
+});
+
+document.addEventListener("DOMContentLoaded", function() {
+    // Function to remove the element whenever it is added
+    function removeElement() {
+        var element = document.querySelector('a[href="https://simplemaps.com"][title="For evaluation use only."]');
+        if (element) {
+            element.remove();
+        }
+    }
+
+    // Create a MutationObserver to watch for changes in the DOM
+    var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.addedNodes.length) {
+                removeElement();
+            }
+        });
+    });
+
+    // Start observing the document for any child node changes
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Try to remove the element in case it already exists
+    removeElement();
 });

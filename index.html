@@ -6,16 +6,32 @@
     <title>Polling Predictions</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"> 
+    <html data-theme="light"></html>                 
     <script src="dp.js"></script>
+    <script type="text/javascript" src="mapdata.js"></script>		
+    <script  type="text/javascript" src="usmap.js"></script>
+    <style>
+        .red { fill: red; }
+        .blue { fill: blue; }
+        .content {
+        max-width: 750px;
+        margin: auto;
+        }
+        a[href="https://simplemaps.com"][title="For evaluation use only."] {
+        display: none !important;
+        }
+        h1, h2, body { 
+            text-align: center;
+            font-family: 'Helvetica'   
+        }
+        
+    </style>
 </head>
 <body>
-
+    <div class="content">
     <h1>Polling Predictions</h1>
-
-    <label for="stateDropdown">Select State: </label>
-    <select id="stateDropdown">
-        <option value="select">--Select--</option>
-    </select>
+    
     <label for="xDropdown">How many days of data?</label>
     <select id="xDropdown">
       <option value="15">15</option>
@@ -23,13 +39,26 @@
       <option selected="selected" value="45">45</option>
     </select>
 
+    <label for="stateDropdown">Select State: </label>
+    <select id="stateDropdown">
+        <option value="select">--Select--</option>
+    </select>
+
     <h2>Results</h2>
+    <div id="resultsState"></div>
+    <br>
     <div id="results">
         <p id="probability">Probability: </p>
         <p id="voteShare">Vote Share: </p>
         <ul id="electoralVotes"></ul>
-        <p id="totalElectoralVotes">Total Electoral Votes: </p>
+        <h2 id="totalElectoralVotes"></h2>
     </div>
-
+</div>
+<div id="map_grandparent" style="text-align: center;">
+    <div id="map_parent" style="width: 75%; display: inline-block;">
+      <div id="map"></div>
+    </div>
+  </div>
+    
 </body>
 </html>
