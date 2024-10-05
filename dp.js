@@ -11,7 +11,16 @@ document.addEventListener("DOMContentLoaded", function () {
     };
   
     let data = [], weights = {}, x = 45; // Default value for x
-    let currentSelectedState = "select";
+    let swingAdjustment = 0; // Global variable to store the swing adjustment
+
+    // Check if the CSV URL is reachable
+    async function checkURL(url) {
+        try {
+            return (await fetch(url, { method: 'HEAD' })).ok;
+        } catch (error) {
+            return false;
+        }
+    }
     
     // Load data and initialize dropdowns
     checkURL(dataUrl).then(isReachable => {
@@ -38,27 +47,7 @@ document.addEventListener("DOMContentLoaded", function () {
         return json[0];
     }
 
-    // Check if the CSV URL is reachable
-    async function checkURL(url) {
-        try {
-            return (await fetch(url, { method: 'HEAD' })).ok;
-        } catch (error) {
-            return false;
-        }
-    }
-    
-    async function fetchAndUpdateResults(selectedState) {
-        // Re-fetch and filter data
-        const filteredData = await fetchAndParseCSV(dataUrl);
-        data = filterByRecentDates(filteredData); // Filter the fetched data based on the updated x value
-    
-        // Update state dropdown based on the filtered data
-        updateStateDropdown();
-    
-        // Update results for the selected state
-        updateResults(selectedState);
-    } 
-
+   
     function countPollsByState(data) {
         const pollCounts = {};
     
@@ -72,78 +61,7 @@ document.addEventListener("DOMContentLoaded", function () {
     
         return pollCounts;
     }
-    
-    function updateStateDropdown() {
-        const dropdown = document.getElementById("stateDropdown");
-        dropdown.innerHTML = ""; // Clear existing options
-        const selectOption = document.createElement("option");
-        selectOption.value = ""; 
-        selectOption.text = "--Select--"; 
-        dropdown.appendChild(selectOption);
         
-        const pollCounts = countPollsByState(data); // Get the poll counts
-        const statesWithSufficientPolls = Object.keys(pollCounts).filter(state => pollCounts[state] >= 20);
-    
-        statesWithSufficientPolls.forEach(state => {
-            const option = document.createElement("option");
-            option.value = state;
-            option.text = state;
-            dropdown.appendChild(option);
-        });
-    }
-    
-    
-    // Update state results when a dropdown selection changes
-    function updateResults(selectedState) {
-        let filteredData;
-        // Filter based on selected state
-        if (selectedState === "select") {
-            filteredData = data.filter(d => d.state && d.state.toLowerCase() === "select");
-        } else {
-            filteredData = data.filter(d => d.state === selectedState);
-        }
-        // Further filter to only include polls from the last x days
-        filteredData = filterByRecentDates(filteredData).filter(d => d.candidate_name.toLowerCase() !== "joe biden" && d.candidate_name.toLowerCase() !== "robert f. kennedy");
-        if (filteredData.length === 0) {
-            console.log(`No data found for state: ${selectedState}`);
-            return;
-        }
-        // Inside the updateResults function, after filtering data
-        const weightedData = calculateWeightedPolls(filteredData, weights);
-        // Group candidates and calculate mean weighted percentage
-        const candidatesData = Array.from(d3.group(weightedData, d => d.candidate_name), ([name, group]) => ({ 
-            name, percentage: d3.mean(group, d => d.weightedPct) 
-        }))
-        .filter(candidate => candidate.percentage >= 0.15); // Only include candidates with at least 0.15%
-        // Normalize percentages to ensure they sum up to 100%
-        const totalPercentage = d3.sum(candidatesData, d => d.percentage);
-        candidatesData.forEach(candidate => {
-            candidate.percentage = (candidate.percentage / totalPercentage) * 100;
-        });
-        // Display popular vote estimate for candidates with percentage >= 0.15%
-        const voteShareText = candidatesData.map(candidate => `${candidate.name}: ${candidate.percentage.toFixed(2)}%`).join(", ");
-        d3.select("#voteShare").text(`Popular Vote Estimate: ${voteShareText}`);
-        // Calculate and display win probabilities for candidates with at least 2% probability
-        const winProbabilities = calculateWinProbability(candidatesData);
-        const probabilityText = Object.entries(winProbabilities).filter(([_, prob]) => prob > 0.5).map(([candidate, prob]) => `${candidate}: ${prob.toFixed(2)}%`).join(", ");
-        d3.select("#probability").text(`Win Probability: ${probabilityText}`);
-        // Calculate and display total electoral votes
-        displayTotalElectoralVotes(calculateTotalElectoralVotes(data));
-        d3.select("#resultsState").text(`Data for: ${selectedState}`);
-    }
-
-    // Filter data based on date range
-    function filterByRecentDates(data) {
-        const now = new Date();
-        const daysAgo = new Date();
-        daysAgo.setDate(now.getDate() - x); // Use the global x variable for filtering
-    
-        return data.filter(d => {
-            const pollDate = new Date(d.end_date); // Adjust if your CSV uses a different date column
-            return pollDate >= daysAgo && pollDate <= now;
-        });
-    }    
-
     // Calculate weighted percentages based on pollster and sponsor weights
     function calculateWeightedPolls(pollData, weights) {
         return pollData.map(poll => {
@@ -151,7 +69,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const sponsorWeight = getWeight(poll.sponsor, weights);
             return { ...poll, weightedPct: poll.pct * Math.min(pollsterWeight, sponsorWeight) };
         });
-    }
+    }   
 
     // Helper to get weight based on the category (pollster/sponsor)
     function getWeight(name, weights) {
@@ -164,53 +82,46 @@ document.addEventListener("DOMContentLoaded", function () {
         if (weights.relmissing.includes(name)) return 1.2;
         return 1;
     }
-
-    // Calculate win probability using Monte Carlo simulations
-    function calculateWinProbability(candidates, iterations = 100000) {
-        const results = candidates.reduce((acc, { name }) => ({ ...acc, [name]: 0 }), {});
-        for (let i = 0; i < iterations; i++) {
-            const randomResults = candidates.map(candidate => ({ name: candidate.name, result: candidate.percentage + (Math.random() - 0.9) * 40 }));
-            results[randomResults.reduce((prev, curr) => (curr.result > prev.result ? curr : prev)).name] += 1;
-        }
-        return Object.fromEntries(Object.entries(results).map(([name, count]) => [name, (count / iterations) * 100]));
-    }
-
+        
     // Calculate total electoral votes for all states
     function calculateTotalElectoralVotes(data) {
         const totalElectoralVotes = {};
-    
-        // Process each state
-        Object.keys(electoralVotesMapping).forEach(state => {
-            const stateData = data.filter(d => d.state === state);
-    
-            // Filter data for the last 3 weeks
-            const recentData = filterByRecentDates(stateData);
-            const weightedRecentData = calculateWeightedPolls(recentData, weights);
-            if (recentData.length > 0) {
-                // Group candidates by name
-                const candidates = d3.group(weightedRecentData, d => d.candidate_name);
-                
-                let highestPercentage = -Infinity;
-                let secondHighestPercentage = -Infinity;
-                let winningCandidate = null;
-                let runnerUpCandidate = null;
-            
-                // Find the candidate with the highest and second highest percentage in each state
-                candidates.forEach((candidateData, candidateName) => {
-                    const percentage = d3.mean(candidateData, d => d.pct);
-                    if (percentage > highestPercentage) {
-                        // Shift the current highest to second place
-                        secondHighestPercentage = highestPercentage;
-                        runnerUpCandidate = winningCandidate;
-            
-                        // Update with new highest
-                        highestPercentage = percentage;
-                        winningCandidate = candidateName;
-                    } else if (percentage > secondHighestPercentage) {
-                        secondHighestPercentage = percentage;
-                        runnerUpCandidate = candidateName;
-                    }
-                });
+
+    // Process each state
+    Object.keys(electoralVotesMapping).forEach(state => {
+        const stateData = data.filter(d => d.state === state);
+        const recentData = filterByRecentDates(stateData);
+        const weightedRecentData = calculateWeightedPolls(recentData, weights);
+
+
+        if (recentData.length > 0) {
+            const candidates = d3.group(weightedRecentData, d => d.candidate_name);
+
+            let highestPercentage = -Infinity;
+            let secondHighestPercentage = -Infinity;
+            let winningCandidate = null;
+            let runnerUpCandidate = null;
+
+            // Find the candidate with the highest and second highest percentage
+            candidates.forEach((candidateData, candidateName) => {
+                let percentage = d3.mean(candidateData, d => d.pct);
+
+                // Apply swing adjustment for Trump
+                if (candidateName === "Donald Trump") {
+                    percentage += swingAdjustment; // Adjust Trump's percentage
+                }
+                // Track highest and second highest percentages
+                if (percentage > highestPercentage) {
+                    secondHighestPercentage = highestPercentage;
+                    runnerUpCandidate = winningCandidate;
+
+                    highestPercentage = percentage;
+                    winningCandidate = candidateName;
+                } else if (percentage > secondHighestPercentage) {
+                    secondHighestPercentage = percentage;
+                    runnerUpCandidate = candidateName;
+                }
+            });
             
                 if (winningCandidate && secondHighestPercentage !== -Infinity) {
                     // Calculate the raw margin of win
@@ -278,9 +189,35 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
             }
         });
+        const trumpVotes = totalElectoralVotes["Donald Trump"] || 0;
+        const harrisVotes = totalElectoralVotes["Kamala Harris"] || 0;
+        const totalVotes = trumpVotes + harrisVotes;
+
+        // Adjust votes to ensure they sum to 538
+        const difference = 538 - totalVotes;
+        if (difference > 0) {
+            totalElectoralVotes["Donald Trump"] = trumpVotes + Math.ceil(difference / 2);
+            totalElectoralVotes["Kamala Harris"] = harrisVotes + Math.floor(difference / 2);
+        } else if (difference < 0) {
+            totalElectoralVotes["Donald Trump"] = trumpVotes + Math.floor(difference / 2);
+            totalElectoralVotes["Kamala Harris"] = harrisVotes + Math.ceil(difference / 2);
+        }
         mapRefresh();
         return totalElectoralVotes;
-    }
+    } 
+
+    // Filter data based on date range
+    function filterByRecentDates(data) {
+        const now = new Date();
+        const daysAgo = new Date();
+        daysAgo.setDate(now.getDate() - x); // Use the global x variable for filtering
+    
+        return data.filter(d => {
+            const pollDate = new Date(d.end_date); // Adjust if your CSV uses a different date column
+            return pollDate >= daysAgo && pollDate <= now;
+        });
+    }  
+    
     function getStateAbbreviation(stateName) {
         const stateAbbreviations = {
             "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA", "Colorado": "CO",
@@ -294,10 +231,31 @@ document.addEventListener("DOMContentLoaded", function () {
             "Washington": "WA", "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY"
         };
     return stateAbbreviations[stateName];
-}
-    // Display the total electoral votes
-    function displayTotalElectoralVotes(totalElectoralVotes) {
-        d3.select("#totalElectoralVotes").text(`EV: ${Object.entries(totalElectoralVotes).map(([candidate, votes]) => `${candidate}: ${votes}`).join(", ")}`);
+    } 
+
+    // Calculate win probability using Monte Carlo simulations
+    function calculateWinProbability(candidates, iterations = 100000) {
+        const results = candidates.reduce((acc, { name }) => ({ ...acc, [name]: 0 }), {});
+        for (let i = 0; i < iterations; i++) {
+            const randomResults = candidates.map(candidate => ({ name: candidate.name, result: candidate.percentage + (Math.random() - 0.9) * 40 }));
+            results[randomResults.reduce((prev, curr) => (curr.result > prev.result ? curr : prev)).name] += 1;
+        }
+        return Object.fromEntries(Object.entries(results).map(([name, count]) => [name, (count / iterations) * 100]));
+    }
+
+    function getStateAbbreviation(stateName) {
+        const stateAbbreviations = {
+            "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA", "Colorado": "CO",
+            "Connecticut": "CT", "Delaware": "DE", "District of Columbia": "DC", "Florida": "FL", "Georgia": "GA",
+            "Hawaii": "HI", "Idaho": "ID", "Illinois": "IL", "Indiana": "IN", "Iowa": "IA", "Kansas": "KS", "Kentucky": "KY",
+            "Louisiana": "LA", "Maine": "ME","Maine CD-1": "ME1", "Maine CD-2": "ME2", "Maryland": "MD", "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN",
+            "Mississippi": "MS", "Missouri": "MO", "Montana": "MT", "Nebraska": "NE", "Nebraska CD-2": "NE2", "Nevada": "NV", "New Hampshire": "NH",
+            "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY", "North Carolina": "NC", "North Dakota": "ND",
+            "Ohio": "OH", "Oklahoma": "OK", "Oregon": "OR", "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC",
+            "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT", "Vermont": "VT", "Virginia": "VA",
+            "Washington": "WA", "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY"
+        };
+    return stateAbbreviations[stateName];
     }
 
     // Populate dropdown menus
@@ -323,26 +281,136 @@ document.addEventListener("DOMContentLoaded", function () {
             const selectedState = this.value;
             updateResults(selectedState);
         });
-    }
-
-    // Set up x value selection dropdown
-    function populateXDropdown() {
-        d3.select("#xDropdown").on("change", function () {
-            x = parseInt(this.value, 10);
-            fetchAndUpdateResults(document.getElementById("stateDropdown").value);
-        });
     }   
     
-    populateXDropdown(); // Initialize x dropdown
-});
+    populateTimeDropdown();
 
-document.addEventListener("DOMContentLoaded", function() {
-    var checkExist = setInterval(function() {
-        var element = document.querySelector('a[href="https://simplemaps.com"][title="For evaluation use only."]');
-        if (element) {
-            element.remove(); // Stop checking once the element is removed
+    // Set up  value selection dropdown
+    function populateTimeDropdown() {
+        d3.select("#xDropdown").on("change", function () {
+            x = parseInt(this.value, 10);
+            const selectedState = document.getElementById("stateDropdown").value;
+            fetchAndUpdateResults(selectedState);  // Updates results for the state based on the new time span
+            // Update the map for all states after changing the time span
+            populateDropdown(data);
+            displayTotalElectoralVotes(calculateTotalElectoralVotes(data));
+        });
+    }
+    
+    async function fetchAndUpdateResults(selectedState) {
+        // Re-fetch and filter data
+        const filteredData = await fetchAndParseCSV(dataUrl);
+        data = filterByRecentDates(filteredData); // Filter the fetched data based on the updated x value
+    
+        // Update state dropdown based on the filtered data
+        updateStateDropdown();
+    
+        // Update results for the selected state
+        updateResults(selectedState);
+    }
+        
+    // Filter data based on date range
+    function filterByRecentDates(data) {
+        const now = new Date();
+        const daysAgo = new Date();
+        daysAgo.setDate(now.getDate() - x); // Use the global x variable for filtering
+    
+        return data.filter(d => {
+            const pollDate = new Date(d.end_date); // Adjust if your CSV uses a different date column
+            return pollDate >= daysAgo && pollDate <= now;
+        });
+    }   
+            
+    function updateStateDropdown() {
+        const dropdown = document.getElementById("stateDropdown");
+        dropdown.innerHTML = ""; // Clear existing options
+        const selectOption = document.createElement("option");
+        selectOption.value = ""; 
+        selectOption.text = "--Select--"; 
+        dropdown.appendChild(selectOption);
+        
+        const pollCounts = countPollsByState(data); // Get the poll counts
+        const statesWithSufficientPolls = Object.keys(pollCounts).filter(state => pollCounts[state] >= 20);
+    
+        statesWithSufficientPolls.forEach(state => {
+            const option = document.createElement("option");
+            option.value = state;
+            option.text = state;
+            dropdown.appendChild(option);
+        });
+        mapRefresh();
+    }
+
+    // Update state results when a dropdown selection changes
+    function updateResults(selectedState) {
+        let filteredData;
+        // Filter based on selected state
+        if (selectedState === "select") {
+            filteredData = data.filter(d => d.state && d.state.toLowerCase() === "select");
+        } else {
+            filteredData = data.filter(d => d.state === selectedState);
         }
-    }, 500); // Check every 500ms 
+        // Further filter to only include polls from the last x days
+        filteredData = filterByRecentDates(filteredData).filter(d => d.candidate_name.toLowerCase() !== "joe biden" && d.candidate_name.toLowerCase() !== "robert f. kennedy");
+        if (filteredData.length === 0) {
+            console.log(`No data found for state: ${selectedState}`);
+            return;
+        }
+        // Inside the updateResults function, after filtering data
+        const weightedData = calculateWeightedPolls(filteredData, weights);
+        // Group candidates and calculate mean weighted percentage
+        const candidatesData = Array.from(d3.group(weightedData, d => d.candidate_name), ([name, group]) => ({ 
+            name, percentage: d3.mean(group, d => d.weightedPct) 
+        }))
+        .filter(candidate => candidate.percentage >= 0.15); // Only include candidates with at least 0.15%
+        // Normalize percentages to ensure they sum up to 100%
+        const totalPercentage = d3.sum(candidatesData, d => d.percentage);
+        candidatesData.forEach(candidate => {
+            candidate.percentage = (candidate.percentage / totalPercentage) * 100;
+        });
+        // Display popular vote estimate for candidates with percentage >= 0.15%
+        const voteShareText = candidatesData.map(candidate => `${candidate.name}: ${candidate.percentage.toFixed(2)}%`).join(", ");
+        d3.select("#voteShare").text(`Popular Vote Estimate: ${voteShareText}`);
+        // Calculate and display win probabilities for candidates with at least 2% probability
+        const winProbabilities = calculateWinProbability(candidatesData);
+        const probabilityText = Object.entries(winProbabilities).filter(([_, prob]) => prob > 0.5).map(([candidate, prob]) => `${candidate}: ${prob.toFixed(2)}%`).join(", ");
+        d3.select("#probability").text(`Win Probability: ${probabilityText}`);
+        // Calculate and display total electoral votes
+        displayTotalElectoralVotes(calculateTotalElectoralVotes(data));
+        d3.select("#resultsState").text(`Data for: ${selectedState}`);
+    }
+
+    // Display the total electoral votes
+    function displayTotalElectoralVotes(totalElectoralVotes) {
+        d3.select("#totalElectoralVotes").text(
+            `EV: ${Object.entries(totalElectoralVotes)
+                .map(([candidate, votes]) => `${candidate}: ${votes}`)
+                .join(", ")}`
+        );
+    }
+    
+   
+    
+
+// Function to handle swing adjustment
+    function handleSwingAdjustment() {
+        document.getElementsByClassName("test").innerHTML = "";
+        const swingInput = document.getElementById("swingInput");
+        swingAdjustment = parseFloat(swingInput.value) || 0; // Get the swing adjustment value
+
+        // Update results with the swing adjustment
+        updateResults(document.getElementById("stateDropdown").value);
+        // Recalculate total electoral votes
+        displayTotalElectoralVotes(calculateTotalElectoralVotes(data));
+        // Refresh the map
+        mapRefresh();
+    }
+
+    // Add event listener to swing input
+    document.getElementById("swingInput").addEventListener("input", handleSwingAdjustment);
+
+
+
 });
 
 document.addEventListener("DOMContentLoaded", function() {
@@ -369,3 +437,5 @@ document.addEventListener("DOMContentLoaded", function() {
     // Try to remove the element in case it already exists
     removeElement();
 });
+
+
