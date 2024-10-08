@@ -168,14 +168,14 @@ document.addEventListener("DOMContentLoaded", function () {
             } else {
                 const stateElectoralVotes = electoralVotesMapping[state];
                 // Add to Harris for specified states
-                if (["Colorado", "Connecticut", "District of Columbia", "Hawaii", "New Jersey", "Oregon", "Vermont", "Washington", "Illinois", "Maine", "Maine CD-1", "New Mexico", "Massachusetts"].includes(state)) {    
+                if (["Colorado", "Connecticut", "District of Columbia", "Hawaii", "Rhode Island", "New Jersey", "Oregon", "Vermont", "Washington", "Illinois", "Maine", "Maine CD-1", "New Mexico", "Massachusetts", "Delaware", "Maryland"].includes(state)) {    
                     var abbState = getStateAbbreviation(state);
                     stateColor = "solidD";
                     applyColor(abbState, stateColor);
                     changeDesc(abbState, stateElectoralVotes);
                     totalElectoralVotes["Kamala Harris"] = (totalElectoralVotes["Kamala Harris"] || 0) + stateElectoralVotes;
                 } 
-                if (["Alabama", "Arkansas", "Idaho", "Kansas", "Kentucky", "Louisiana", "Mississippi", "Missouri", "Maine CD-2", "Oklahoma", "South Dakota", "Tennessee", "Utah", "West Virginia", "Wyoming"].includes(state)){
+                if (["Alabama", "Arkansas", "Idaho", "Kansas", "Kentucky", "Louisiana", "Montana", "Mississippi", "Missouri", "Maine CD-2", "Oklahoma", "South Dakota", "Tennessee", "Utah", "West Virginia", "Wyoming"].includes(state)){
                     // Add to Trump for other states
                     var abbState = getStateAbbreviation(state);
                     stateColor = "solidR";
