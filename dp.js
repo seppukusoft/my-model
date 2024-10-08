@@ -12,6 +12,7 @@ document.addEventListener("DOMContentLoaded", function () {
   
     let data = [], weights = {}, x = 45; // Default value for x
     let swingAdjustment = 0; // Global variable to store the swing adjustment
+    const excludedPollIds = [88555, 88556];
 
     // Check if the CSV URL is reachable
     async function checkURL(url) {
@@ -50,9 +51,9 @@ document.addEventListener("DOMContentLoaded", function () {
    
     function countPollsByState(data) {
         const pollCounts = {};
-    
+        const filteredData = data.filter(poll => !excludedPollIds.includes(poll.poll_id));
         // Count polls for each state
-        data.forEach(poll => {
+        filteredData.forEach(poll => {
             const state = poll.state;
             if (state) {
                 pollCounts[state] = (pollCounts[state] || 0) + 1;
@@ -86,10 +87,10 @@ document.addEventListener("DOMContentLoaded", function () {
     // Calculate total electoral votes for all states
     function calculateTotalElectoralVotes(data) {
         const totalElectoralVotes = {};
-
+        const filteredData = data.filter(d => !excludedPollIds.includes(d.poll_id));
     // Process each state
     Object.keys(electoralVotesMapping).forEach(state => {
-        const stateData = data.filter(d => d.state === state);
+        const stateData = filteredData.filter(d => d.state === state);
         const recentData = filterByRecentDates(stateData);
         const weightedRecentData = calculateWeightedPolls(recentData, weights);
 
@@ -132,7 +133,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     if (winningCandidate === 'Donald Trump') {
                         marginForHarris = -margin; // Negative margin for Trump
                     }
-                    
+                    console.log(state);
                     if (state != undefined){
                         if (marginForHarris > 8){
                             stateColor = "solidD"
@@ -168,7 +169,8 @@ document.addEventListener("DOMContentLoaded", function () {
             } else {
                 const stateElectoralVotes = electoralVotesMapping[state];
                 // Add to Harris for specified states
-                if (["Colorado", "Connecticut", "District of Columbia", "Hawaii", "Rhode Island", "New Jersey", "Oregon", "Vermont", "Washington", "Illinois", "Maine", "Maine CD-1", "New Mexico", "Massachusetts", "Delaware", "Maryland"].includes(state)) {    
+                if (["Colorado", "Connecticut", "District of Columbia", "Hawaii", "Rhode Island", "New Jersey", "Oregon", "Vermont", "Washington", "Illinois", "Maine", "Maine CD-1", "New Mexico", "Massachusetts", "Delaware", "Maryland"].includes(state)) {
+                    console.log(state);    
                     var abbState = getStateAbbreviation(state);
                     stateColor = "solidD";
                     applyColor(abbState, stateColor);
@@ -177,6 +179,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 } 
                 if (["Alabama", "Arkansas", "Idaho", "Kansas", "Kentucky", "Louisiana", "Montana", "Mississippi", "Missouri", "Maine CD-2", "Oklahoma", "South Dakota", "Tennessee", "Utah", "West Virginia", "Wyoming"].includes(state)){
                     // Add to Trump for other states
+                    console.log(state);
                     var abbState = getStateAbbreviation(state);
                     stateColor = "solidR";
                     applyColor(abbState, stateColor);
@@ -189,19 +192,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
             }
         });
-        const trumpVotes = totalElectoralVotes["Donald Trump"] || 0;
-        const harrisVotes = totalElectoralVotes["Kamala Harris"] || 0;
-        const totalVotes = trumpVotes + harrisVotes;
-
-        // Adjust votes to ensure they sum to 538
-        const difference = 538 - totalVotes;
-        if (difference > 0) {
-            totalElectoralVotes["Donald Trump"] = trumpVotes + Math.ceil(difference / 2);
-            totalElectoralVotes["Kamala Harris"] = harrisVotes + Math.floor(difference / 2);
-        } else if (difference < 0) {
-            totalElectoralVotes["Donald Trump"] = trumpVotes + Math.floor(difference / 2);
-            totalElectoralVotes["Kamala Harris"] = harrisVotes + Math.ceil(difference / 2);
-        }
+        
         mapRefresh();
         return totalElectoralVotes;
     } 
@@ -214,7 +205,7 @@ document.addEventListener("DOMContentLoaded", function () {
     
         return data.filter(d => {
             const pollDate = new Date(d.end_date); // Adjust if your CSV uses a different date column
-            return pollDate >= daysAgo && pollDate <= now;
+            return pollDate >= daysAgo && pollDate <= now && !excludedPollIds.includes(d.poll_id);
         });
     }  
     
@@ -317,7 +308,7 @@ document.addEventListener("DOMContentLoaded", function () {
     
         return data.filter(d => {
             const pollDate = new Date(d.end_date); // Adjust if your CSV uses a different date column
-            return pollDate >= daysAgo && pollDate <= now;
+            return pollDate >= daysAgo && pollDate <= now && !excludedPollIds.includes(d.poll_id);
         });
     }   
             
@@ -350,6 +341,7 @@ document.addEventListener("DOMContentLoaded", function () {
         } else {
             filteredData = data.filter(d => d.state === selectedState);
         }
+        filteredData = filteredData.filter(d => !excludedPollIds.includes(d.poll_id));
         // Further filter to only include polls from the last x days
         filteredData = filterByRecentDates(filteredData).filter(d => d.candidate_name.toLowerCase() !== "joe biden" && d.candidate_name.toLowerCase() !== "robert f. kennedy");
         if (filteredData.length === 0) {
