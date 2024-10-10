@@ -12,7 +12,7 @@ document.addEventListener("DOMContentLoaded", function () {
   
     let data = [], weights = {}, x = 45; // Default value for x
     let swingAdjustment = 0; // Global variable to store the swing adjustment
-    const excludedPollIds = [88555, 88556];
+    const excludedPollIds = [88555, 88556, 88594, 88383];
 
     // Check if the CSV URL is reachable
     async function checkURL(url) {
